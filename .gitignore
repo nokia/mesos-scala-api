@@ -1,0 +1,11 @@
+target/
+build/
+.idea/
+.history
+.cache-main
+.cache-tests
+.classpath
+.project
+.scalastyle
+.settings/
+bin/
