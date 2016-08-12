@@ -260,8 +260,19 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
 
     val lt = launcher.submitTask(taskd1)
     val fut = lt.info
+
+    // to test that the Observable is indeed cold, we create
+    // another subscription when TASK_RUNNING arrives
     val evsP = Promise[Vector[MesosEvents.TaskEvent]]()
-    lt.events.foldLeft(Vector.empty[MesosEvents.TaskEvent])(_ :+ _).subscribe { evs =>
+    val evsPLate = Promise[Vector[MesosEvents.TaskEvent]]()
+    lt.events.foldLeft(Vector.empty[MesosEvents.TaskEvent]) { (evs, ev) =>
+      if (ev.state == TaskState.TASK_RUNNING) {
+        lt.events.foldLeft(Vector.empty[MesosEvents.TaskEvent])(_ :+ _).subscribe { evs =>
+          evsPLate.success(evs)
+        }
+      }
+      evs :+ ev
+    }.subscribe { evs =>
       evsP.success(evs)
     }
 
@@ -276,6 +287,9 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     send(running)
     send(finished)
 
+    // since the Observable must be cold, both
+    // subscriptions must have got the same events:
     evsP.future.futureValue should be (Vector(starting, running, finished))
+    evsPLate.future.futureValue should be (Vector(starting, running, finished))
   }
 }
