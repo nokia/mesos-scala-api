@@ -186,7 +186,10 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
       case (TaskRequest(_, id), idx) =>
         LaunchedTask.impl(
           p.future.map { tis => tis(idx) },
-          eventProvider.events.collect(MesosEvents.collectByTaskId(id)).replay
+          eventProvider.events
+            .collect(MesosEvents.collectByTaskId(id))
+            .takeUntil { ev => MesosFramework.terminalStates.contains(ev.state) }
+            .replay.autoConnect
         )
     }
   }

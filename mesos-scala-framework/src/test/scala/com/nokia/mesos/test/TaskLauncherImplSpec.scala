@@ -28,7 +28,7 @@ package com.nokia.mesos.test
 import scala.collection.immutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ Future, Promise }
 import scala.concurrent.duration._
 
 import org.apache.mesos.mesos._
@@ -116,7 +116,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   val ti1 = taskInfo(taskd1)
   val ti2 = taskInfo(taskd2)
 
-  "launch" should "decline non matching offers" in {
+  "submitTask(s)" should "decline non matching offers" in {
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("RESOURCE_X")).once
 
@@ -247,5 +247,35 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
 
     send(offerEv("RESOURCE_A"))
     fut.isCompleted should be(false)
+  }
+
+  "TaskEvent stream" should "provide all events" in {
+    val generatedId = new java.util.concurrent.atomic.AtomicReference[TaskID]
+    (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).onCall { (off, tsk) =>
+      val tid = tsk.toSeq(0).taskId
+      generatedId.set(tid)
+      Seq(Future.successful(ti1.copy(taskId = tid)))
+    }
+    (mockFw.decline _).expects(*).never
+
+    val lt = launcher.submitTask(taskd1)
+    val fut = lt.info
+    val evsP = Promise[Vector[MesosEvents.TaskEvent]]()
+    lt.events.foldLeft(Vector.empty[MesosEvents.TaskEvent])(_ :+ _).subscribe { evs =>
+      evsP.success(evs)
+    }
+
+    send(offerEv("RESOURCE_A"))
+    fut.futureValue should be(ti1.copy(taskId = generatedId.get()))
+
+    val starting = MesosEvents.TaskEvent(TaskStatus(generatedId.get(), TaskState.TASK_STARTING))
+    val running = MesosEvents.TaskEvent(TaskStatus(generatedId.get(), TaskState.TASK_RUNNING))
+    val finished = MesosEvents.TaskEvent(TaskStatus(generatedId.get(), TaskState.TASK_FINISHED))
+
+    send(starting)
+    send(running)
+    send(finished)
+
+    evsP.future.futureValue should be (Vector(starting, running, finished))
   }
 }
