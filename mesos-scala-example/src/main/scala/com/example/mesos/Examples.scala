@@ -72,21 +72,18 @@ object Examples extends LazyLogging {
 
     for {
       (fwId, master) <- fw.connect()
-      task <- fw.submitTask(task)
-      _ = logger.info(s"Task successfully started on slave ${task.slaveId.value}")
-      s = driver.eventProvider.events.collect {
-        case e @ TaskEvent(task.taskId, _, _) => e
-      }
-      _ = s.subscribe(new Subscriber[MesosEvent] {
-        override def onNext(e: MesosEvent): Unit = e match {
-          case te: TaskEvent if te.state.isTaskFinished => p.success(())
-          case te: TaskEvent if (te.state.isTaskError || te.state.isTaskFailed ||
-            te.state.isTaskLost || te.state.isTaskKilled || te.state.isTaskKilling) =>
-            p.failure(new MesosException("task encountered error"))
-          case _ =>
-        }
+      launched = fw.submitTask(task)
+      task <- launched.info
+    } {
+      logger.info(s"Task successfully started on slave ${task.slaveId.value}")
+      launched.events.subscribe(_ match {
+        case te: TaskEvent if te.state.isTaskFinished => p.success(())
+        case te: TaskEvent if (te.state.isTaskError || te.state.isTaskFailed ||
+          te.state.isTaskLost || te.state.isTaskKilled || te.state.isTaskKilling) =>
+          p.failure(new MesosException("task encountered error"))
+        case _ =>
       })
-    } yield ()
+    }
 
     for {
       _ <- p.future

@@ -31,7 +31,7 @@ import scala.concurrent.Future
 import org.apache.mesos.mesos.{ Offer, OfferID }
 
 import com.nokia.mesos.api.async.Scheduling
-import com.nokia.mesos.api.async.TaskLauncher.{ Filter, NoFilter, TaskAllocation, TaskDescriptor }
+import com.nokia.mesos.api.async.TaskLauncher.{ Filter, NoFilter, TaskAllocation, TaskRequest }
 
 /**
  * A simple, naive implementation of `Scheduling`
@@ -50,7 +50,7 @@ class SimpleScheduling extends Scheduling with TaskAllocator {
     }
   }
 
-  def schedule(tasks: Seq[TaskDescriptor], filter: Filter, urgency: Float): Future[TaskAllocation] = {
+  def schedule(tasks: Seq[TaskRequest], filter: Filter, urgency: Float): Future[TaskAllocation] = {
     val optAllocation: Option[TaskAllocation] = tryAllocate(
       currentOffers.values.toSeq,
       tasks,

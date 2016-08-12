@@ -58,10 +58,10 @@ class FrameworkFactorySpec extends FlatSpec with Matchers {
       override def createFramework(d: MesosDriver): MesosFramework with TaskLauncher = {
         new AbstractFrameworkImpl(d) {
           override val scheduling: Scheduling = new Scheduling {
-            def offer(offers: Seq[Offer]): Unit = ()
-            def rescind(offers: Seq[OfferID]): Unit = ()
-            def schedule(
-              tasks: Seq[TaskLauncher.TaskDescriptor],
+            override def offer(offers: Seq[Offer]): Unit = ()
+            override def rescind(offers: Seq[OfferID]): Unit = ()
+            override def schedule(
+              tasks: Seq[TaskLauncher.TaskRequest],
               filter: TaskLauncher.Filter,
               urgency: Float
             ): Future[TaskLauncher.TaskAllocation] = {

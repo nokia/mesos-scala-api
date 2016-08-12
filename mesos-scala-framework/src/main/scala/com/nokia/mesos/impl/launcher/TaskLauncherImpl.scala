@@ -27,7 +27,7 @@ package com.nokia.mesos.impl.launcher
 
 import java.util.UUID
 
-import scala.collection.concurrent
+import scala.collection.{ concurrent, immutable }
 import scala.concurrent.{ ExecutionContext, Future, Promise }
 
 import org.apache.mesos.mesos
@@ -56,7 +56,7 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
 
   def scheduling: Scheduling
 
-  private[this] val waitingTasks = new concurrent.TrieMap[TaskRequest, Promise[Seq[mesos.TaskInfo]]]
+  private[this] val waitingTasks = new concurrent.TrieMap[RequestedTasks, Promise[Vector[mesos.TaskInfo]]]
 
   // TODO: maybe unsubscribe from this, when disconnecting?
   private[this] lazy val offerSubscription = eventProvider.events.collect { case off: OfferEvent => off }.subscribe(_ match {
@@ -76,12 +76,12 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
    */
   private[this] def tasksForResources(
     offers: Seq[mesos.Offer]
-  ): Future[(TaskRequest, TaskAllocation, Promise[Seq[mesos.TaskInfo]])] = {
+  ): Future[(RequestedTasks, TaskAllocation, Promise[Vector[mesos.TaskInfo]])] = {
 
     def allocate(
-      taskRequest: TaskRequest,
-      promise: Promise[Seq[mesos.TaskInfo]]
-    ): Future[(TaskRequest, TaskAllocation, Promise[Seq[mesos.TaskInfo]])] = {
+      taskRequest: RequestedTasks,
+      promise: Promise[Vector[mesos.TaskInfo]]
+    ): Future[(RequestedTasks, TaskAllocation, Promise[Vector[mesos.TaskInfo]])] = {
       scheduling.offer(offers)
       scheduling.schedule(
         taskRequest.tasks,
@@ -90,8 +90,8 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
     }
 
     def go(
-      tasks: Iterator[(TaskRequest, Promise[Seq[mesos.TaskInfo]])]
-    ): Future[(TaskRequest, TaskAllocation, Promise[Seq[mesos.TaskInfo]])] = {
+      tasks: Iterator[(RequestedTasks, Promise[Vector[mesos.TaskInfo]])]
+    ): Future[(RequestedTasks, TaskAllocation, Promise[Vector[mesos.TaskInfo]])] = {
       if (tasks.isEmpty) {
         Future.failed(Scheduling.NoMatch())
       } else {
@@ -170,14 +170,28 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
     }
   }
 
-  override def submitTasks(tasks: Seq[TaskDescriptor], filter: Option[Filter]): Future[Seq[TaskInfo]] = {
+  override def submitTasks(tasks: Seq[TaskDescriptor], filter: Option[Filter]): immutable.Seq[LaunchedTask] = {
     // force subscription:
     this.offerSubscription
     // TODO: what if we're not connected yet?
-    val p = Promise[Seq[mesos.TaskInfo]]()
-    waitingTasks.put(TaskRequest(tasks, filter), p)
+    val p = Promise[Vector[mesos.TaskInfo]]()
+    val withIds = tasks.toVector.map { t =>
+      // generate random task ID:
+      TaskRequest(t, mesos.TaskID(UUID.randomUUID().toString))
+    }
+    waitingTasks.put(RequestedTasks(withIds, filter), p)
     logger info s"New tasks (${tasks.size}) registered, waiting for offers"
-    p.future
+
+    withIds.zipWithIndex.map {
+      case (TaskRequest(_, id), idx) =>
+        LaunchedTask.impl(
+          p.future.map { tis => tis(idx) },
+          eventProvider.events
+            .collect(MesosEvents.collectByTaskId(id))
+            .takeUntil { ev => MesosFramework.terminalStates.contains(ev.state) }
+            .replay.autoConnect
+        )
+    }
   }
 }
 
@@ -185,16 +199,19 @@ object TaskLauncherImpl {
 
   import TaskLauncher._
 
-  private final case class TaskRequest(tasks: Seq[TaskDescriptor], filter: Option[Filter])
+  private final case class RequestedTasks(
+    tasks: Vector[TaskRequest],
+    filter: Option[Filter]
+  )
 
-  private def taskInfo(offer: mesos.Offer, taskDescr: TaskDescriptor): mesos.TaskInfo = {
-    taskDescr.job match {
+  private def taskInfo(offer: mesos.Offer, task: TaskRequest): mesos.TaskInfo = {
+    task.desc.job match {
       case Left(command) =>
         mesos.TaskInfo(
-          name = taskDescr.name,
-          taskId = mesos.TaskID(UUID.randomUUID().toString),
+          name = task.desc.name,
+          taskId = task.id,
           slaveId = offer.slaveId,
-          resources = taskDescr.resources,
+          resources = task.desc.resources,
           executor = None,
           command = Some(command),
           container = None
@@ -202,10 +219,10 @@ object TaskLauncherImpl {
       // TODO: make this case more generic; this will run docker as a task, with the default `docker run image`
       case Right(container) =>
         mesos.TaskInfo(
-          name = taskDescr.name,
-          taskId = mesos.TaskID(UUID.randomUUID().toString),
+          name = task.desc.name,
+          taskId = task.id,
           slaveId = offer.slaveId,
-          resources = taskDescr.resources,
+          resources = task.desc.resources,
           executor = None,
           command = Some(mesos.CommandInfo(shell = Some(false))),
           container = Some(container)

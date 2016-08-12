@@ -29,7 +29,7 @@ import scala.concurrent.Future
 
 import org.apache.mesos.mesos.{ Offer, OfferID }
 
-import com.nokia.mesos.api.async.TaskLauncher.{ Filter, TaskAllocation, TaskDescriptor }
+import com.nokia.mesos.api.async.TaskLauncher.{ Filter, TaskAllocation, TaskRequest }
 
 /**
  * Abstract API for matching offers with task requests
@@ -55,7 +55,7 @@ trait Scheduling {
    *
    * @return a future that completes when a match is found given the requirements
    */
-  def schedule(tasks: Seq[TaskDescriptor], filter: Filter, urgency: Float = 0.0f): Future[TaskAllocation]
+  def schedule(tasks: Seq[TaskRequest], filter: Filter, urgency: Float = 0.0f): Future[TaskAllocation]
 }
 
 object Scheduling {

@@ -28,7 +28,7 @@ package com.nokia.mesos.test
 import scala.collection.immutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ Future, Promise }
 import scala.concurrent.duration._
 
 import org.apache.mesos.mesos._
@@ -116,11 +116,11 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   val ti1 = taskInfo(taskd1)
   val ti2 = taskInfo(taskd2)
 
-  "launch" should "decline non matching offers" in {
+  "submitTask(s)" should "decline non matching offers" in {
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("RESOURCE_X")).once
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_X"))
     fut.isCompleted should be(false)
@@ -130,40 +130,40 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_A"))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "accept a good offer after a bad offer" in {
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(OfferID("RESOURCE_X"))
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_X"))
     fut.isCompleted should be(false)
 
     send(offerEv("RESOURCE_A"))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "decline unused offers" in {
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(OfferID("RESOURCE_X"))
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offersEv("RESOURCE_A", "RESOURCE_X"))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "decline filtered offers" in {
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("O2")).once
 
-    val fut = launcher.submitTasks(Seq(taskDescriptor("my task", "RESOURCE_A")), Some(slaveIdFilter("s1")))
+    val fut = launcher.submitTask(taskDescriptor("my task", "RESOURCE_A"), slaveIdFilter("s1")).info
 
     send(MesosEvents.Offer(Offer(OfferID("O2"), FrameworkID("fw-1"), SlaveID("s2"), "host", None, resource("RESOURCE_A"))))
     fut.isCompleted should be(false)
@@ -173,10 +173,10 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("O2")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskDescriptor("my task", "RESOURCE_A")), Some(slaveIdFilter("s2")))
+    val fut = launcher.submitTask(taskDescriptor("my task", "RESOURCE_A"), slaveIdFilter("s2")).info
 
     send(MesosEvents.Offer(Offer(OfferID("O2"), FrameworkID("fw-1"), SlaveID("s2"), "host", None, resource("RESOURCE_A"))))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "collect offers for multiple tasks" ignore {
@@ -187,13 +187,13 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_B")), *).returns(Seq(Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), None)
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2))
 
     send(offerEv("RESOURCE_A"))
-    fut.isCompleted should be(false)
+    lt(0).info.isCompleted should be(false)
 
     send(offerEv("RESOURCE_B"))
-    fut.isCompleted should be(false)
+    lt(1).info.isCompleted should be(false)
   }
 
   it should "use multiple offers for multiple tasks" in {
@@ -202,10 +202,11 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
       .returns(Seq(Future.successful(ti1), Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), None)
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2))
 
     send(offersEv("RESOURCE_A", "RESOURCE_B"))
-    fut.futureValue should be(Seq(ti1, ti2))
+    lt(0).info.futureValue should be (ti1)
+    lt(1).info.futureValue should be (ti2)
   }
 
   it should "decline when filters refuse multiple offers" in {
@@ -213,11 +214,12 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.decline _).expects(OfferID("RESOURCE_A"))
     (mockFw.decline _).expects(OfferID("RESOURCE_B"))
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
 
     send(offersEv("RESOURCE_A", "RESOURCE_B"))
 
-    fut.isCompleted should be(false)
+    lt(0).info.isCompleted should be(false)
+    lt(1).info.isCompleted should be(false)
   }
 
   it should "accept offers that matches filter for multiple tasks" in {
@@ -225,14 +227,14 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("o2")), *).returns(Seq(Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
 
     send(MesosEvents.Offer(
       Offer(OfferID("o1"), FrameworkID("fw-1"), SlaveID("s1"), "host1", None, resource("RESOURCE_A")),
       Offer(OfferID("o2"), FrameworkID("fw-1"), SlaveID("s2"), "host2", None, resource("RESOURCE_B"))
     ))
 
-    fut.futureValue should be(Seq(ti1, ti2))
+    Future.sequence(lt.map(_.info)).futureValue should be(Seq(ti1, ti2))
   }
 
   // TODO: also test multi launch, accept a good offer after a bad offer that is filtered out
@@ -241,9 +243,53 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(*, *).throws(new Exception("artifical error"))
     (mockFw.decline _).expects(OfferID("RESOURCE_A"))
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_A"))
     fut.isCompleted should be(false)
+  }
+
+  "TaskEvent stream" should "provide all events" in {
+    val generatedId = new java.util.concurrent.atomic.AtomicReference[TaskID]
+    (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).onCall { (off, tsk) =>
+      val tid = tsk.toSeq(0).taskId
+      generatedId.set(tid)
+      Seq(Future.successful(ti1.copy(taskId = tid)))
+    }
+    (mockFw.decline _).expects(*).never
+
+    val lt = launcher.submitTask(taskd1)
+    val fut = lt.info
+
+    // to test that the Observable is indeed cold, we create
+    // another subscription when TASK_RUNNING arrives
+    val evsP = Promise[Vector[MesosEvents.TaskEvent]]()
+    val evsPLate = Promise[Vector[MesosEvents.TaskEvent]]()
+    lt.events.foldLeft(Vector.empty[MesosEvents.TaskEvent]) { (evs, ev) =>
+      if (ev.state == TaskState.TASK_RUNNING) {
+        lt.events.foldLeft(Vector.empty[MesosEvents.TaskEvent])(_ :+ _).subscribe { evs =>
+          evsPLate.success(evs)
+        }
+      }
+      evs :+ ev
+    }.subscribe { evs =>
+      evsP.success(evs)
+    }
+
+    send(offerEv("RESOURCE_A"))
+    fut.futureValue should be(ti1.copy(taskId = generatedId.get()))
+
+    val starting = MesosEvents.TaskEvent(TaskStatus(generatedId.get(), TaskState.TASK_STARTING))
+    val running = MesosEvents.TaskEvent(TaskStatus(generatedId.get(), TaskState.TASK_RUNNING))
+    val finished = MesosEvents.TaskEvent(TaskStatus(generatedId.get(), TaskState.TASK_FINISHED))
+
+    send(starting)
+    send(running)
+    send(finished)
+
+    // since the Observable must be cold, both
+    // subscriptions must have got the same events:
+    evsP.future.futureValue should be (Vector(starting, running, finished))
+    evsPLate.future.futureValue should be (Vector(starting, running, finished))
   }
 }

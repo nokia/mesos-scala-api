@@ -30,7 +30,7 @@ import scala.collection.immutable
 import org.apache.mesos.mesos._
 import org.scalatest.{ FlatSpec, Matchers }
 
-import com.nokia.mesos.api.async.TaskLauncher.{ TaskAllocation, Filter, TaskDescriptor }
+import com.nokia.mesos.api.async.TaskLauncher.{ TaskAllocation, Filter, TaskDescriptor, TaskRequest }
 import com.nokia.mesos.impl.launcher.TaskAllocator
 
 class TaskAllocatorSpec extends FlatSpec with Matchers {
@@ -39,8 +39,8 @@ class TaskAllocatorSpec extends FlatSpec with Matchers {
 
   val ra = Resource("a", Value.Type.SCALAR, Some(Value.Scalar(5)))
   val rb = Resource("b", Value.Type.SCALAR, Some(Value.Scalar(6)))
-  val td1 = TaskDescriptor("task 1", immutable.Seq(ra), Left(CommandInfo()))
-  val td2 = TaskDescriptor("task 2", immutable.Seq(rb), Left(CommandInfo()))
+  val td1 = TaskRequest(TaskDescriptor("task 1", immutable.Seq(ra), Left(CommandInfo())), TaskID("tid1"))
+  val td2 = TaskRequest(TaskDescriptor("task 2", immutable.Seq(rb), Left(CommandInfo())), TaskID("tid2"))
 
   "Allocator" should "work for anti-affinity" in {
     val tasks = Seq(td1, td2)

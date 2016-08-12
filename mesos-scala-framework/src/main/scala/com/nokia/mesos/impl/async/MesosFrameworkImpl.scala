@@ -160,6 +160,7 @@ trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
     // FIXME: what to do if 2 TASK_RUNNING arrives for 1 task (in theory, that shouldn't happen)
     val promise = Promise[TaskInfo]()
     val taskEventStream = driver.eventProvider.events.collect(collectByTaskId(task.taskId))
+    val replayStream = taskEventStream.replay
     taskEventStream.timeout(launchTimeout).subscribe(
       new Subscriber[TaskEvent]() {
 
