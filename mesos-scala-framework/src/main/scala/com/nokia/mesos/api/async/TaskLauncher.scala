@@ -25,10 +25,15 @@
  */
 package com.nokia.mesos.api.async
 
+import scala.collection.immutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 
 import org.apache.mesos.mesos._
+
+import com.nokia.mesos.api.stream.MesosEvents.TaskEvent
+
+import rx.lang.scala.Observable
 
 /**
  * High level task launching API
@@ -52,28 +57,28 @@ trait TaskLauncher {
    * reject allocations (e.g., to implement affinity
    * rules)
    */
-  def submitTasks(tasks: Seq[TaskDescriptor], filter: Option[Filter]): Future[Seq[TaskInfo]]
+  def submitTasks(tasks: Seq[TaskDescriptor], filter: Option[Filter]): immutable.Seq[LaunchedTask]
 
   // convenience methods:
 
   /**
    * @see `submitTasks`
    */
-  def submitTask(task: TaskDescriptor): Future[TaskInfo] =
-    submitTasks(Seq(task), None).map(_.head)
+  def submitTask(task: TaskDescriptor): LaunchedTask =
+    submitTasks(Seq(task), None).head
 
   /**
    * @see `submitTasks`
    */
-  def submitTask(task: TaskDescriptor, filter: Filter): Future[TaskInfo] =
-    submitTasks(Seq(task), Some(filter)).map(_.head)
+  def submitTask(task: TaskDescriptor, filter: Filter): LaunchedTask =
+    submitTasks(Seq(task), Some(filter)).head
 
   /** Convenience overload, to submit without a filter */
-  def submitTasks(tasks: Seq[TaskDescriptor]): Future[Seq[TaskInfo]] =
+  def submitTasks(tasks: Seq[TaskDescriptor]): immutable.Seq[LaunchedTask] =
     submitTasks(tasks, None)
 
   /** Convenience overload, to submit with a filter */
-  def submitTasks(tasks: Seq[TaskDescriptor], filter: Filter): Future[Seq[TaskInfo]] =
+  def submitTasks(tasks: Seq[TaskDescriptor], filter: Filter): immutable.Seq[LaunchedTask] =
     submitTasks(tasks, Some(filter))
 }
 
@@ -90,9 +95,36 @@ object TaskLauncher {
   )
 
   /**
+   * A task requested to be launched
+   */
+  final case class TaskRequest(
+    desc: TaskDescriptor,
+    id: TaskID
+  )
+
+  /**
+   * Info about a launched task
+   */
+  sealed trait LaunchedTask {
+
+    /** Completed when the task is successfully started */
+    val info: Future[TaskInfo]
+
+    /** Cold Observable of all events related to this task */
+    val events: Observable[TaskEvent]
+  }
+
+  private[mesos] object LaunchedTask {
+    def impl(i: Future[TaskInfo], e: Observable[TaskEvent]): LaunchedTask = new LaunchedTask {
+      override val info = i
+      override val events = e
+    }
+  }
+
+  /**
    * Offers matched with the tasks to launch with them
    */
-  type TaskAllocation = Map[Offer, List[TaskDescriptor]]
+  type TaskAllocation = Map[Offer, List[TaskRequest]]
 
   /**
    * Filtering for possible allocations,

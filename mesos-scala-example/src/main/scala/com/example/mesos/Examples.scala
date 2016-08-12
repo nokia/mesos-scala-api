@@ -72,7 +72,7 @@ object Examples extends LazyLogging {
 
     for {
       (fwId, master) <- fw.connect()
-      task <- fw.submitTask(task)
+      task <- fw.submitTask(task).info
       _ = logger.info(s"Task successfully started on slave ${task.slaveId.value}")
       s = driver.eventProvider.events.collect {
         case e @ TaskEvent(task.taskId, _, _) => e

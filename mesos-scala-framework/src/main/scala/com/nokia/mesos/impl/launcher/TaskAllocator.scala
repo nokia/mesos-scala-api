@@ -41,17 +41,18 @@ trait TaskAllocator extends LazyLogging {
 
   import TaskLauncher._
 
-  def tryAllocate(offers: Seq[mesos.Offer], tasks: Seq[TaskDescriptor], optFilter: Option[Filter]): Option[TaskAllocation] = {
+  def tryAllocate(offers: Seq[mesos.Offer], tasks: Seq[TaskRequest], optFilter: Option[Filter]): Option[TaskAllocation] = {
     logger info s"Searching for valid allocation for tasks ${tasks} in offers: $offers"
+    val taskList = tasks.map(_.desc).toList
 
     // optimization: first quickly check approximate resource constraints
-    if (trySimpleAllocation(ResourceProcessor.sumResources(offers.flatMap(_.resources)), tasks)) {
+    if (trySimpleAllocation(ResourceProcessor.sumResources(offers.flatMap(_.resources)), taskList)) {
       // generate actual allocations, and verify them:
       val filter: (TaskAllocation => Boolean) = optFilter match {
         case Some(f) => (m => resourceFilter(m) && f(m))
         case None => resourceFilter
       }
-      val res = generateAllocations(offers, tasks.to[List]).find(filter)
+      val res = generateAllocations(offers, tasks.toList).find(filter)
       res.fold(logger info "No valid allocation found")(all => logger info s"Found valid allocation: $all")
       res
     } else {
@@ -67,7 +68,7 @@ trait TaskAllocator extends LazyLogging {
       case (offer, tasks) => {
         val remains = tasks.foldLeft(Option(offer.resources.toVector)) {
           case (Some(remainder), task) =>
-            ResourceProcessor.remainderOf(remainder, task.resources)
+            ResourceProcessor.remainderOf(remainder, task.desc.resources)
           case (None, _) =>
             None
         }
@@ -89,7 +90,7 @@ trait TaskAllocator extends LazyLogging {
       }
   }
 
-  private[mesos] def generateAllocations(offers: Seq[mesos.Offer], tasks: List[TaskDescriptor]): Iterator[TaskAllocation] = {
+  private[mesos] def generateAllocations(offers: Seq[mesos.Offer], tasks: List[TaskRequest]): Iterator[TaskAllocation] = {
     val a = TaskAllocator.allocate(offers, tasks)
     a.map(_.mapValues(_.to[List])).iterator
   }

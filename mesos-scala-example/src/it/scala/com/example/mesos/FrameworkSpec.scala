@@ -91,7 +91,7 @@ class FrameworkSpec
   "abort" should "work correctly" in {
     val st = for {
       fw <- Examples.connect()
-      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1"))
+      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1")).info
       st <- fw.abort()
     } yield st
     assert(st.futureValue(PatienceConfig(2.seconds)) == Status.DRIVER_ABORTED)
@@ -101,12 +101,12 @@ class FrameworkSpec
     val fw = Examples.createFw()
     val fut = for {
       _ <- fw.connect()
-      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1"))
+      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1")).info
       st <- fw.disconnect()
       _ = assert(st == Status.DRIVER_STOPPED)
       fw = Examples.createFw()
       _ <- fw.connect()
-      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1"))
+      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1")).info
     } yield ti
     val taskInfo = fut.futureValue(PatienceConfig(5.seconds))
     assert(taskInfo.command.get.value.get == "sleep 1")

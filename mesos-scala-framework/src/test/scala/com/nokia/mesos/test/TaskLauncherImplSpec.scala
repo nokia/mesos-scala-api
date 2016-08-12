@@ -120,7 +120,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("RESOURCE_X")).once
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_X"))
     fut.isCompleted should be(false)
@@ -130,40 +130,40 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_A"))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "accept a good offer after a bad offer" in {
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(OfferID("RESOURCE_X"))
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_X"))
     fut.isCompleted should be(false)
 
     send(offerEv("RESOURCE_A"))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "decline unused offers" in {
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(OfferID("RESOURCE_X"))
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offersEv("RESOURCE_A", "RESOURCE_X"))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "decline filtered offers" in {
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("O2")).once
 
-    val fut = launcher.submitTasks(Seq(taskDescriptor("my task", "RESOURCE_A")), Some(slaveIdFilter("s1")))
+    val fut = launcher.submitTask(taskDescriptor("my task", "RESOURCE_A"), slaveIdFilter("s1")).info
 
     send(MesosEvents.Offer(Offer(OfferID("O2"), FrameworkID("fw-1"), SlaveID("s2"), "host", None, resource("RESOURCE_A"))))
     fut.isCompleted should be(false)
@@ -173,10 +173,10 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("O2")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskDescriptor("my task", "RESOURCE_A")), Some(slaveIdFilter("s2")))
+    val fut = launcher.submitTask(taskDescriptor("my task", "RESOURCE_A"), slaveIdFilter("s2")).info
 
     send(MesosEvents.Offer(Offer(OfferID("O2"), FrameworkID("fw-1"), SlaveID("s2"), "host", None, resource("RESOURCE_A"))))
-    fut.futureValue should be(Seq(ti1))
+    fut.futureValue should be(ti1)
   }
 
   it should "collect offers for multiple tasks" ignore {
@@ -187,13 +187,13 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_B")), *).returns(Seq(Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), None)
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2))
 
     send(offerEv("RESOURCE_A"))
-    fut.isCompleted should be(false)
+    lt(0).info.isCompleted should be(false)
 
     send(offerEv("RESOURCE_B"))
-    fut.isCompleted should be(false)
+    lt(1).info.isCompleted should be(false)
   }
 
   it should "use multiple offers for multiple tasks" in {
@@ -202,10 +202,11 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
       .returns(Seq(Future.successful(ti1), Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), None)
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2))
 
     send(offersEv("RESOURCE_A", "RESOURCE_B"))
-    fut.futureValue should be(Seq(ti1, ti2))
+    lt(0).info.futureValue should be (ti1)
+    lt(1).info.futureValue should be (ti2)
   }
 
   it should "decline when filters refuse multiple offers" in {
@@ -213,11 +214,12 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.decline _).expects(OfferID("RESOURCE_A"))
     (mockFw.decline _).expects(OfferID("RESOURCE_B"))
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
 
     send(offersEv("RESOURCE_A", "RESOURCE_B"))
 
-    fut.isCompleted should be(false)
+    lt(0).info.isCompleted should be(false)
+    lt(1).info.isCompleted should be(false)
   }
 
   it should "accept offers that matches filter for multiple tasks" in {
@@ -225,14 +227,14 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(Set(OfferID("o2")), *).returns(Seq(Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
 
-    val fut = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
+    val lt = launcher.submitTasks(Seq(taskd1, taskd2), Some(differentSlaveFilter))
 
     send(MesosEvents.Offer(
       Offer(OfferID("o1"), FrameworkID("fw-1"), SlaveID("s1"), "host1", None, resource("RESOURCE_A")),
       Offer(OfferID("o2"), FrameworkID("fw-1"), SlaveID("s2"), "host2", None, resource("RESOURCE_B"))
     ))
 
-    fut.futureValue should be(Seq(ti1, ti2))
+    Future.sequence(lt.map(_.info)).futureValue should be(Seq(ti1, ti2))
   }
 
   // TODO: also test multi launch, accept a good offer after a bad offer that is filtered out
@@ -241,7 +243,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     (mockFw.launch _).expects(*, *).throws(new Exception("artifical error"))
     (mockFw.decline _).expects(OfferID("RESOURCE_A"))
 
-    val fut = launcher.submitTasks(Seq(taskd1), None)
+    val fut = launcher.submitTask(taskd1).info
 
     send(offerEv("RESOURCE_A"))
     fut.isCompleted should be(false)
