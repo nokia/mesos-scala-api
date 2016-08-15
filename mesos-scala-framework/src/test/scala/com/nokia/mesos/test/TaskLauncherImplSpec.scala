@@ -45,6 +45,9 @@ import com.nokia.mesos.impl.launcher.SimpleScheduling
 import com.nokia.mesos.impl.launcher.TaskLauncherImpl
 
 import rx.lang.scala.Subject
+import com.nokia.mesos.api.stream.MesosEvents.OfferEvent
+import com.nokia.mesos.api.async.MesosDriver
+import com.nokia.mesos.SchedulerDriver
 
 class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with MockFactory with OneInstancePerTest {
 
@@ -55,16 +58,26 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   val mockFw = mock[MesosFramework]
   val mockEvents = Subject[MesosEvent]()
   val mockEventProvider = new MesosEvents { override def events = mockEvents }
+  val mockDriver = new MesosDriver {
+    lazy val executor: ExecutionContext = global
+    def schedulerDriver: SchedulerDriver = fail() // unused in this test
+    def eventProvider: MesosEvents = mockEventProvider
+  }
 
   def send(e: MesosEvent): Unit = mockEvents.onNext(e)
 
   // --== MUT ==--
   val launcher = new TaskLauncherImpl {
+
     override val fw: MesosFramework = mockFw
     override implicit val executor: ExecutionContext = scala.concurrent.ExecutionContext.global
-    override def currentDriver() = fail() // unused in this test
-    override def eventProvider = mockEventProvider
     override val scheduling = new SimpleScheduling
+
+    mockEventProvider.events.collect { case off: OfferEvent => off }.subscribe(_ match {
+      case MesosEvents.Offer(o) =>
+        handle(o)
+      case _ =>
+    })
   }
 
   protected override def withExpectations[T](what: => T): T = {
@@ -118,6 +131,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   val ti2 = taskInfo(taskd2)
 
   "submitTask(s)" should "decline non matching offers" in {
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("RESOURCE_X")).once
 
@@ -128,6 +142,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "accept an offer" in {
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(*).never
 
@@ -138,6 +153,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "accept a good offer after a bad offer" in {
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(OfferID("RESOURCE_X"))
 
@@ -151,6 +167,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "decline unused offers" in {
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(OfferID("RESOURCE_X"))
 
@@ -161,6 +178,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "decline filtered offers" in {
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("O2")).once
 
@@ -171,6 +189,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "accept offer that matches a given filter" in {
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("O2")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.decline _).expects(*).never
 
@@ -184,7 +203,9 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
     // TODO launcher could hold on to potentially good offers, e.g.
     // - offer fits one or more but not all tasks -> keep, until some policy
     // - offer does not fit any task -> decline immediately
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).returns(Seq(Future.successful(ti1)))
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_B")), *).returns(Seq(Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
 
@@ -198,6 +219,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "use multiple offers for multiple tasks" in {
+    (mockFw.currentDriver _).expects().twice().returning(mockDriver)
     (mockFw.launch _)
       .expects(Set(OfferID("RESOURCE_A"), OfferID("RESOURCE_B")), *)
       .returns(Seq(Future.successful(ti1), Future.successful(ti2)))
@@ -211,6 +233,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "decline when filters refuse multiple offers" in {
+    (mockFw.currentDriver _).expects().twice().returning(mockDriver)
     (mockFw.launch _).expects(*, *).never
     (mockFw.decline _).expects(OfferID("RESOURCE_A"))
     (mockFw.decline _).expects(OfferID("RESOURCE_B"))
@@ -224,6 +247,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   }
 
   it should "accept offers that matches filter for multiple tasks" in {
+    (mockFw.currentDriver _).expects().twice().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("o1")), *).returns(Seq(Future.successful(ti1)))
     (mockFw.launch _).expects(Set(OfferID("o2")), *).returns(Seq(Future.successful(ti2)))
     (mockFw.decline _).expects(*).never
@@ -241,6 +265,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   // TODO: also test multi launch, accept a good offer after a bad offer that is filtered out
 
   it should "decline offer, when launch throws an exception" in {
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(*, *).throws(new Exception("artifical error"))
     (mockFw.decline _).expects(OfferID("RESOURCE_A"))
 
@@ -252,6 +277,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
 
   "TaskEvent stream" should "provide all events" in {
     val generatedId = new java.util.concurrent.atomic.AtomicReference[TaskID]
+    (mockFw.currentDriver _).expects().returning(mockDriver)
     (mockFw.launch _).expects(Set(OfferID("RESOURCE_A")), *).onCall { (off, tsk) =>
       val tid = tsk.toSeq(0).taskId
       generatedId.set(tid)

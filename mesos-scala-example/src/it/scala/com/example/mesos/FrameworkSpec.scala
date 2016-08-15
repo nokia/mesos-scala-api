@@ -112,8 +112,7 @@ class FrameworkSpec
     assert(taskInfo.command.get.value.get == "sleep 1")
   }
 
-  // TODO: fix this
-  it should "be possible without recreating the framework" ignore {
+  it should "be possible without recreating the framework" in {
     val fw = Examples.createFw()
     val fut = for {
       _ <- fw.connect()

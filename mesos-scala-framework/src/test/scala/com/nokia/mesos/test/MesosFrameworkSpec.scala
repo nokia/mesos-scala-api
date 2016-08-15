@@ -35,13 +35,14 @@ import org.scalatest.{ FlatSpec, Matchers, OneInstancePerTest }
 import org.scalatest.concurrent.ScalaFutures
 
 import com.nokia.mesos.SchedulerDriver
+import com.nokia.mesos.api.async.MesosDriver
 import com.nokia.mesos.api.async.MesosException
+import com.nokia.mesos.api.async.Scheduling
 import com.nokia.mesos.api.stream.MesosEvents
 import com.nokia.mesos.api.stream.MesosEvents.MesosEvent
 import com.nokia.mesos.impl.async.MesosFrameworkImpl
 
 import rx.lang.scala.{ Observable, Subject }
-import com.nokia.mesos.api.async.MesosDriver
 
 class MesosFrameworkSpec extends FlatSpec with Matchers with ScalaFutures with MockFactory with OneInstancePerTest {
 
@@ -73,6 +74,9 @@ class MesosFrameworkSpec extends FlatSpec with Matchers with ScalaFutures with M
         override def events: Observable[MesosEvent] = MesosFrameworkSpec.this.events
       }
     }
+
+    protected def handle(offers: Seq[org.apache.mesos.mesos.Offer]): Future[Unit] = fail() // unused
+    protected def scheduling: Scheduling = fail() // unused
   }
 
   //helpers

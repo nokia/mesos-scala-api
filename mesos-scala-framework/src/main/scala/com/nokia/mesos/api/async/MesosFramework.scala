@@ -90,6 +90,12 @@ trait MesosFramework {
   def decline(offerId: OfferID): Unit
 
   // TODO: rest of driver methods (revive, etc.)
+
+  /**
+   * The currently connected driver instance
+   * (throws exception if not connected).
+   */
+  def currentDriver(): MesosDriver
 }
 
 object MesosFramework {

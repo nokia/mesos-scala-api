@@ -31,15 +31,18 @@ import scala.collection.concurrent
 import scala.concurrent.{ blocking, Future, Promise }
 import scala.concurrent.duration._
 
-import org.apache.mesos.mesos.{ OfferID, TaskInfo, _ }
+import org.apache.mesos.mesos
+import org.apache.mesos.mesos._
 import org.apache.mesos.mesos.TaskState.{ TASK_STAGING, TASK_STARTING }
 
 import com.nokia.mesos.api.async._
 import com.nokia.mesos.api.async.MesosDriver
+import com.nokia.mesos.api.stream.MesosEvents
 import com.nokia.mesos.api.stream.MesosEvents._
 import com.typesafe.scalalogging.LazyLogging
 
 import rx.lang.scala.{ Observable, Subscriber, Subscription }
+import scala.concurrent.ExecutionContext
 
 /** Default implementation of `MesosFramework` */
 trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
@@ -51,6 +54,13 @@ trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
    * actually communicates with Mesos
    */
   protected def mkDriver: () => MesosDriver
+
+  protected def handle(offers: Seq[mesos.Offer]): Future[Unit]
+
+  protected def scheduling: Scheduling
+
+  protected def executor: ExecutionContext =
+    currentDriver().executor
 
   /**
    * If no connection related event arrives for this duration,
@@ -76,7 +86,7 @@ trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
   /** Current state of the framework */
   private[this] val state = new AtomicReference[State](State.Disconnected)
 
-  protected def currentDriver(): MesosDriver =
+  override def currentDriver(): MesosDriver =
     currentDriver("currently in disconnected state")
 
   protected def currentDriver(msg: String): MesosDriver = {
@@ -95,6 +105,17 @@ trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
       require(false, "not in disconnected state")
     }
 
+    val offerSubscription = driver.eventProvider.events.collect { case off: OfferEvent => off }.subscribe(_ match {
+      case MesosEvents.Offer(o) =>
+        handle(o).recover {
+          case ex: Any =>
+            logger.warn(s"Exception while handling offer (will decline)", ex)
+            for (off <- o) this.decline(off.id)
+        } (driver.executor)
+      case Rescindment(offId) =>
+        scheduling.rescind(Seq(offId))
+    })
+
     val p: Promise[(FrameworkID, MasterInfo, MesosDriver)] = Promise()
     val connectionEvents = driver.eventProvider.events.collect { case e @ (_: Registered | Disconnected | _: MesosError) => e }
     connectionEvents.timeout(connectTimeout).subscribe(
@@ -108,7 +129,7 @@ trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
         override def onNext(e: MesosEvent): Unit = e match {
           case r: Registered =>
             unsubscribe()
-            state.set(State.Connected(driver))
+            state.set(State.Connected(driver, offerSubscription))
             p.success((r.frameworkId, r.masterInfo, driver))
           case Disconnected =>
             unsubscribe()
@@ -283,7 +304,11 @@ trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
    * simply disconnect
    */
   private def stop(act: Action): Future[Status] = {
-    val driver = startDisconnecting()
+    val (driver, subs) = startDisconnecting()
+
+    // unsubscribe from offers:
+    subs.unsubscribe()
+
     // unsubscribe from updates of currently running tasks:
     for (id <- taskStateSubscriptions.keys) {
       taskStateSubscriptions.remove(id).foreach(_.unsubscribe())
@@ -308,15 +333,15 @@ trait MesosFrameworkImpl extends MesosFramework with LazyLogging {
     } (driver.executor)
   }
 
-  private def startDisconnecting(): MesosDriver = {
+  private def startDisconnecting(): (MesosDriver, Subscription) = {
     state.get() match {
-      case c @ State.Connected(dr) =>
+      case c @ State.Connected(dr, s) =>
         if (!state.compareAndSet(c, State.Disconnecting(dr))) {
           // retry
           startDisconnecting()
         } else {
           // we're done
-          dr
+          (dr, s)
         }
       case _ =>
         throw new IllegalArgumentException(notConnected)
@@ -364,7 +389,7 @@ private object MesosFrameworkImpl {
 
     final case class Connecting(driver: MesosDriver) extends HalfConnected
 
-    final case class Connected(driver: MesosDriver) extends HalfConnected {
+    final case class Connected(driver: MesosDriver, offerSubs: Subscription) extends HalfConnected {
 
       override def isConnected =
         true

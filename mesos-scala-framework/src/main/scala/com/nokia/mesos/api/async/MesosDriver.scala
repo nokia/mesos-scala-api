@@ -44,7 +44,7 @@ trait MesosDriver {
    * Default executor to be used
    * by Future callbacks
    */
-  implicit def executor: ExecutionContext
+  implicit val executor: ExecutionContext
 
   /** Passes low level commands to Mesos */
   def schedulerDriver: SchedulerDriver
