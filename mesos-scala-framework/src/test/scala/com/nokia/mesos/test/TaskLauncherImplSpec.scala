@@ -62,6 +62,7 @@ class TaskLauncherImplSpec extends FlatSpec with Matchers with ScalaFutures with
   val launcher = new TaskLauncherImpl {
     override val fw: MesosFramework = mockFw
     override implicit val executor: ExecutionContext = scala.concurrent.ExecutionContext.global
+    override def currentDriver() = fail() // unused in this test
     override def eventProvider = mockEventProvider
     override val scheduling = new SimpleScheduling
   }

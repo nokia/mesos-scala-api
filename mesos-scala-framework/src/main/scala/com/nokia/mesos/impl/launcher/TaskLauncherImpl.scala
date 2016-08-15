@@ -39,6 +39,7 @@ import com.nokia.mesos.api.stream.MesosEvents
 import com.nokia.mesos.api.stream.MesosEvents._
 import com.typesafe.scalalogging.LazyLogging
 import com.typesafe.scalalogging.Logger
+import com.nokia.mesos.api.async.MesosDriver
 
 /**
  * Default implementation of `TaskLauncher`
@@ -50,9 +51,13 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
 
   protected def fw: MesosFramework
 
-  implicit protected def executor: ExecutionContext
+  protected def currentDriver(): MesosDriver
 
-  def eventProvider: MesosEvents
+  implicit protected def executor: ExecutionContext =
+    currentDriver().executor
+
+  def eventProvider: MesosEvents =
+    currentDriver().eventProvider
 
   def scheduling: Scheduling
 

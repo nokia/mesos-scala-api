@@ -40,14 +40,14 @@ trait FrameworkFactory {
    * Create the framework, which will use the
    * specified `driver` to connect to Mesos
    */
-  def createFramework(driver: MesosDriver): MesosFramework with TaskLauncher
+  def createFramework(newDriver: () => MesosDriver): MesosFramework with TaskLauncher
 }
 
 /**
  * Creates the default implementation of `MesosFramework`
  */
 object FrameworkFactory extends FrameworkFactory {
-  override def createFramework(driver: MesosDriver): MesosFramework with TaskLauncher = {
-    new FrameworkImpl(driver)
+  override def createFramework(newDriver: () => MesosDriver): MesosFramework with TaskLauncher = {
+    new FrameworkImpl(newDriver)
   }
 }

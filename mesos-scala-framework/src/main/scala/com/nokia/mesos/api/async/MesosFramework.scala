@@ -44,7 +44,7 @@ trait MesosFramework {
    *
    * @return Future that completes once Mesos registered
    */
-  def connect(): Future[(FrameworkID, MasterInfo)]
+  def connect(): Future[(FrameworkID, MasterInfo, MesosDriver)]
 
   /**
    * Closes the connection to Mesos

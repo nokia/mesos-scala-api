@@ -43,18 +43,13 @@ import com.nokia.mesos.impl.async.MesosFrameworkImpl
  * @param driver The driver which actually
  * communicates with Mesos
  */
-abstract class AbstractFrameworkImpl(override val driver: MesosDriver)
-    extends MesosFrameworkImpl
+abstract class AbstractFrameworkImpl(
+  protected override val mkDriver: () => MesosDriver
+) extends MesosFrameworkImpl
     with TaskLauncherImpl {
-
-  protected override val executor: ExecutionContext =
-    driver.executor
 
   protected override val fw: MesosFramework =
     this
-
-  override val eventProvider: MesosEvents =
-    driver.eventProvider
 }
 
 /**
@@ -62,8 +57,8 @@ abstract class AbstractFrameworkImpl(override val driver: MesosDriver)
  * `AbstractFrameworkImpl`, with
  * the default `SimpleScheduling`
  */
-class FrameworkImpl(driver: MesosDriver)
-    extends AbstractFrameworkImpl(driver) {
+class FrameworkImpl(mkDriver: () => MesosDriver)
+    extends AbstractFrameworkImpl(mkDriver) {
 
   override val scheduling: Scheduling =
     new SimpleScheduling

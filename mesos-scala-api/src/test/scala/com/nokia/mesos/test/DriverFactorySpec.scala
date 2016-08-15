@@ -55,7 +55,7 @@ class DriverFactorySpec extends FlatSpec with Matchers {
         frameworkInfo: FrameworkInfo,
         url: String,
         scheduler: Scheduler with MesosEvents
-      )(implicit ec: ExecutionContext): MesosDriver = new MesosDriver {
+      )(implicit ec: ExecutionContext): () => MesosDriver = () => new MesosDriver {
 
         val executor: ExecutionContext =
           ec
@@ -70,12 +70,12 @@ class DriverFactorySpec extends FlatSpec with Matchers {
       override def createDriver(
         frameworkInfo: FrameworkInfo,
         url: String
-      )(implicit ec: ExecutionContext): MesosDriver = {
-        this.createDriver(frameworkInfo, url, ???)
+      )(implicit ec: ExecutionContext): () => MesosDriver = {
+        () => this.createDriver(frameworkInfo, url, ???)(global)()
       }
     }
 
     val f: (FrameworkInfo, String) => MesosDriver =
-      customDriverFactory.createDriver _
+      (fw, s) => customDriverFactory.createDriver(fw, s)(global)()
   }
 }

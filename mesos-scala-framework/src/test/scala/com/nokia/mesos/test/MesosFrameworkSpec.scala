@@ -63,7 +63,10 @@ class MesosFrameworkSpec extends FlatSpec with Matchers with ScalaFutures with M
     override val launchTimeout = testTimeout
     override val killTimeout = testTimeout
 
-    override val driver = new MesosDriver {
+    override def mkDriver =
+      () => driver
+
+    lazy val driver = new MesosDriver {
       override implicit val executor: ExecutionContext = scala.concurrent.ExecutionContext.global
       override val schedulerDriver: SchedulerDriver = MesosFrameworkSpec.this.driver
       override val eventProvider: MesosEvents = new MesosEvents {
@@ -85,7 +88,8 @@ class MesosFrameworkSpec extends FlatSpec with Matchers with ScalaFutures with M
     (driver.start _).when.returns(Status.DRIVER_RUNNING)
     val connecting = fw.connect()
     emit(MesosEvents.Registered(FwId("fw-1"), Master("master-1")))
-    connecting.futureValue should be((FwId("fw-1"), Master("master-1")))
+    connecting.futureValue._1 should be (FwId("fw-1"))
+    connecting.futureValue._2 should be (Master("master-1"))
   }
 
   "connect" should "time out" in {
