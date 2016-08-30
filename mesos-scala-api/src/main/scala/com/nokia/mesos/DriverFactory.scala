@@ -45,13 +45,13 @@ trait DriverFactory {
     frameworkInfo: FrameworkInfo,
     url: String,
     scheduler: Scheduler with MesosEvents
-  )(implicit ec: ExecutionContext): MesosDriver
+  )(implicit ec: ExecutionContext): () => MesosDriver
 
   /** Creates driver with default `MesosEvents` */
   def createDriver(
     frameworkInfo: FrameworkInfo,
     url: String
-  )(implicit ec: ExecutionContext): MesosDriver
+  )(implicit ec: ExecutionContext): () => MesosDriver
 }
 
 /**
@@ -64,7 +64,7 @@ object DriverFactory extends DriverFactory {
     frameworkInfo: FrameworkInfo,
     url: String,
     scheduler: Scheduler with MesosEvents
-  )(implicit ec: ExecutionContext): MesosDriver = {
+  )(implicit ec: ExecutionContext): () => MesosDriver = () => {
     val driver = new org.apache.mesos.MesosSchedulerDriver(
       new SchedulerProxy(scheduler),
       FrameworkInfo.toJavaProto(frameworkInfo),
@@ -83,8 +83,8 @@ object DriverFactory extends DriverFactory {
   override def createDriver(
     frameworkInfo: FrameworkInfo,
     url: String
-  )(implicit ec: ExecutionContext): MesosDriver = {
+  )(implicit ec: ExecutionContext): () => MesosDriver = () => {
     val scheduler = new EventProvidingScheduler
-    createDriver(frameworkInfo, url, scheduler)(ec)
+    createDriver(frameworkInfo, url, scheduler)(ec)()
   }
 }

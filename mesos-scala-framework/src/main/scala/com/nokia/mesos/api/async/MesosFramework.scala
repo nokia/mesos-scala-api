@@ -44,7 +44,7 @@ trait MesosFramework {
    *
    * @return Future that completes once Mesos registered
    */
-  def connect(): Future[(FrameworkID, MasterInfo)]
+  def connect(): Future[(FrameworkID, MasterInfo, MesosDriver)]
 
   /**
    * Closes the connection to Mesos
@@ -90,6 +90,12 @@ trait MesosFramework {
   def decline(offerId: OfferID): Unit
 
   // TODO: rest of driver methods (revive, etc.)
+
+  /**
+   * The currently connected driver instance
+   * (throws exception if not connected).
+   */
+  def currentDriver(): MesosDriver
 }
 
 object MesosFramework {

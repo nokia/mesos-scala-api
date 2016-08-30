@@ -65,13 +65,13 @@ object Examples extends LazyLogging {
       name = "runSingleCommand test framework",
       user = "" // if empty string, Mesos will run task as current user
     )
-    val driver = DriverFactory.createDriver(fwInfo, masterUrl)
-    val fw = FrameworkFactory.createFramework(driver)
+    val mkDriver = DriverFactory.createDriver(fwInfo, masterUrl)
+    val fw = FrameworkFactory.createFramework(mkDriver)
 
     val p = Promise[Unit]
 
     for {
-      (fwId, master) <- fw.connect()
+      (fwId, master, driver) <- fw.connect()
       launched = fw.submitTask(task)
       task <- launched.info
     } {

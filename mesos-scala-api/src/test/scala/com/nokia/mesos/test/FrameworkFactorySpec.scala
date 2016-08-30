@@ -55,7 +55,7 @@ class FrameworkFactorySpec extends FlatSpec with Matchers {
     // this won't actually work, we're testing only the API
     val customFrameworkFactory: FrameworkFactory = new FrameworkFactory {
 
-      override def createFramework(d: MesosDriver): MesosFramework with TaskLauncher = {
+      override def createFramework(d: () => MesosDriver): MesosFramework with TaskLauncher = {
         new AbstractFrameworkImpl(d) {
           override val scheduling: Scheduling = new Scheduling {
             override def offer(offers: Seq[Offer]): Unit = ()

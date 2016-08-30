@@ -35,13 +35,14 @@ import org.scalatest.{ FlatSpec, Matchers, OneInstancePerTest }
 import org.scalatest.concurrent.ScalaFutures
 
 import com.nokia.mesos.SchedulerDriver
+import com.nokia.mesos.api.async.MesosDriver
 import com.nokia.mesos.api.async.MesosException
+import com.nokia.mesos.api.async.Scheduling
 import com.nokia.mesos.api.stream.MesosEvents
 import com.nokia.mesos.api.stream.MesosEvents.MesosEvent
 import com.nokia.mesos.impl.async.MesosFrameworkImpl
 
 import rx.lang.scala.{ Observable, Subject }
-import com.nokia.mesos.api.async.MesosDriver
 
 class MesosFrameworkSpec extends FlatSpec with Matchers with ScalaFutures with MockFactory with OneInstancePerTest {
 
@@ -63,13 +64,19 @@ class MesosFrameworkSpec extends FlatSpec with Matchers with ScalaFutures with M
     override val launchTimeout = testTimeout
     override val killTimeout = testTimeout
 
-    override val driver = new MesosDriver {
+    override def mkDriver =
+      () => driver
+
+    lazy val driver = new MesosDriver {
       override implicit val executor: ExecutionContext = scala.concurrent.ExecutionContext.global
       override val schedulerDriver: SchedulerDriver = MesosFrameworkSpec.this.driver
       override val eventProvider: MesosEvents = new MesosEvents {
         override def events: Observable[MesosEvent] = MesosFrameworkSpec.this.events
       }
     }
+
+    protected def handle(offers: Seq[org.apache.mesos.mesos.Offer]): Future[Unit] = fail() // unused
+    protected def scheduling: Scheduling = fail() // unused
   }
 
   //helpers
@@ -85,7 +92,8 @@ class MesosFrameworkSpec extends FlatSpec with Matchers with ScalaFutures with M
     (driver.start _).when.returns(Status.DRIVER_RUNNING)
     val connecting = fw.connect()
     emit(MesosEvents.Registered(FwId("fw-1"), Master("master-1")))
-    connecting.futureValue should be((FwId("fw-1"), Master("master-1")))
+    connecting.futureValue._1 should be (FwId("fw-1"))
+    connecting.futureValue._2 should be (Master("master-1"))
   }
 
   "connect" should "time out" in {

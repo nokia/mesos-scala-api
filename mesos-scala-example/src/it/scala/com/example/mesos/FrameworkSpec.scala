@@ -111,4 +111,22 @@ class FrameworkSpec
     val taskInfo = fut.futureValue(PatienceConfig(5.seconds))
     assert(taskInfo.command.get.value.get == "sleep 1")
   }
+
+  it should "be possible without recreating the framework" in {
+    val fw = Examples.createFw()
+    val fut = for {
+      _ <- fw.connect()
+      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1")).info
+      _ = logger.info("Disconnecting ...")
+      st <- fw.disconnect()
+      _ = assert(st == Status.DRIVER_STOPPED)
+      _ = logger.info("Disconnected.")
+      _ = logger.info("Reconnecting ...")
+      _ <- fw.connect()
+      _ = logger.info("Reconnected.")
+      ti <- fw.submitTask(Examples.shellTaskDescriptor("sleep 1")).info
+    } yield ti
+    val taskInfo = fut.futureValue(PatienceConfig(5.seconds))
+    assert(taskInfo.command.get.value.get == "sleep 1")
+  }
 }

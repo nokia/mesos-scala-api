@@ -39,6 +39,7 @@ import com.nokia.mesos.api.stream.MesosEvents
 import com.nokia.mesos.api.stream.MesosEvents._
 import com.typesafe.scalalogging.LazyLogging
 import com.typesafe.scalalogging.Logger
+import com.nokia.mesos.api.async.MesosDriver
 
 /**
  * Default implementation of `TaskLauncher`
@@ -50,25 +51,9 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
 
   protected def fw: MesosFramework
 
-  implicit protected def executor: ExecutionContext
-
-  def eventProvider: MesosEvents
-
   def scheduling: Scheduling
 
   private[this] val waitingTasks = new concurrent.TrieMap[RequestedTasks, Promise[Vector[mesos.TaskInfo]]]
-
-  // TODO: maybe unsubscribe from this, when disconnecting?
-  private[this] lazy val offerSubscription = eventProvider.events.collect { case off: OfferEvent => off }.subscribe(_ match {
-    case Offer(o) =>
-      handle(o) recover {
-        case ex: Any =>
-          logger.warn(s"Exception while handling offer (will decline)", ex)
-          for (off <- o) fw.decline(off.id)
-      }
-    case Rescindment(offId) =>
-      scheduling.rescind(Seq(offId))
-  })
 
   /**
    * Selects the tasks which can
@@ -114,7 +99,7 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
   /**
    * Handles the offers as they arrive
    */
-  def handle(offers: Seq[mesos.Offer]): Future[Unit] = {
+  protected def handle(offers: Seq[mesos.Offer]): Future[Unit] = {
     logger.info(s"handling offers $offers")
     tasksForResources(offers).andThen {
       case _ =>
@@ -171,8 +156,6 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
   }
 
   override def submitTasks(tasks: Seq[TaskDescriptor], filter: Option[Filter]): immutable.Seq[LaunchedTask] = {
-    // force subscription:
-    this.offerSubscription
     // TODO: what if we're not connected yet?
     val p = Promise[Vector[mesos.TaskInfo]]()
     val withIds = tasks.toVector.map { t =>
@@ -186,7 +169,7 @@ trait TaskLauncherImpl extends TaskLauncher with LazyLogging {
       case (TaskRequest(_, id), idx) =>
         LaunchedTask.impl(
           p.future.map { tis => tis(idx) },
-          eventProvider.events
+          fw.currentDriver().eventProvider.events
             .collect(MesosEvents.collectByTaskId(id))
             .takeUntil { ev => MesosFramework.terminalStates.contains(ev.state) }
             .replay.autoConnect
