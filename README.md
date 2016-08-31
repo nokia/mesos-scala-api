@@ -7,7 +7,7 @@ This library provides a [Scala](http://www.scala-lang.org) API for [Mesos](https
 The library is available for Scala 2.11. Currently it is not yet published to a public repository, so you have to publish it locally (`publishLocal` in sbt). To use it, it's enough to depend on the `mesos-scala-api` artifact. To achieve this, add the following to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.nokia" %% "mesos-scala-api" % "0.0.3"
+libraryDependencies += "com.nokia" %% "mesos-scala-api" % "0.4.0"
 ```
 
 ## <a name="deps"></a>Dependencies
