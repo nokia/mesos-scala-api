@@ -99,7 +99,7 @@ lazy val commonSettings = Seq(
 
   organization := "com.nokia",
   organizationName := "Nokia",
-  version := "0.0.3",
+  version := "0.4.0-SNAPSHOT",
   description := "A Scala API for Mesos",
   licenses ++= Seq(
     "BSD-3-Clause" -> url("https://opensource.org/licenses/BSD-3-Clause"),
