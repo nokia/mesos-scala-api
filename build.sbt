@@ -31,8 +31,20 @@ import scalariform.formatter.preferences._
 import com.trueaccord.scalapb.{ScalaPbPlugin => PB}
 import com.typesafe.sbteclipse.plugin.EclipsePlugin.EclipseKeys
 
+lazy val root = (project in file(".")).
+  settings(commonSettings: _*).
+  settings(noPublishSettings: _*).
+  aggregate(
+    `mesos-scala-api`,
+    `mesos-scala-interface`,
+    `mesos-scala-framework`,
+    `mesos-scala-java-bridge`,
+    `mesos-scala-example`
+  )
+
 lazy val `mesos-scala-api` = (project in file("mesos-scala-api")).
   settings(commonSettings: _*).
+  settings(publishSettings: _*).
   settings(fork in Test := true).
   dependsOn(
     `mesos-scala-framework`,
@@ -41,6 +53,7 @@ lazy val `mesos-scala-api` = (project in file("mesos-scala-api")).
 
 lazy val `mesos-scala-interface` = (project in file("mesos-scala-interface")).
   settings(commonSettings: _*).
+  settings(publishSettings: _*).
   settings(
     libraryDependencies += "org.apache.mesos" % "mesos" % "0.28.2",
     PB.protobufSettings,
@@ -52,6 +65,7 @@ lazy val `mesos-scala-interface` = (project in file("mesos-scala-interface")).
 
 lazy val `mesos-scala-framework` = (project in file("mesos-scala-framework")).
   settings(commonSettings: _*).
+  settings(publishSettings: _*).
   dependsOn(`mesos-scala-interface`).
   settings(
     libraryDependencies ++= Seq(
@@ -61,17 +75,14 @@ lazy val `mesos-scala-framework` = (project in file("mesos-scala-framework")).
 
 lazy val `mesos-scala-java-bridge` = (project in file("mesos-scala-java-bridge")).
   settings(commonSettings: _*).
+  settings(publishSettings: _*).
   dependsOn(`mesos-scala-interface`).
   settings(connectInput in Test := true)
 
 lazy val `mesos-scala-example` = (project in file("mesos-scala-example")).
   settings(commonSettings: _*).
+  settings(noPublishSettings: _*).
   dependsOn(`mesos-scala-api`).
-  settings(
-    publish := (),
-    publishLocal := (),
-    publishArtifact := false
-  ).
   configs(IntegrationTest).
   settings(Defaults.itSettings: _*).
   settings(
@@ -94,6 +105,11 @@ lazy val commonSettings = Seq(
     "BSD-3-Clause" -> url("https://opensource.org/licenses/BSD-3-Clause"),
     "Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")
   ),
+  homepage := Some(url("https://github.com/nokia/mesos-scala-api")),
+  scmInfo := Some(ScmInfo(
+    url("https://github.com/nokia/mesos-scala-api"),
+    "scm:git:github.com/nokia/mesos-scala-api.git"
+  )),
 
   // Scala:
   scalaVersion := "2.11.8",
@@ -136,6 +152,29 @@ lazy val commonSettings = Seq(
   headers := Map(
     "scala" -> (HeaderPattern.cStyleBlockComment, License.Nokia.cStyle)
   )
+)
+
+lazy val publishSettings = Seq(
+  pomExtra := {
+    <developers>
+      <developer>
+        <id>aszarvas</id>
+        <name>aszarvas</name>
+        <url>https://github.com/aszarvas</url>
+      </developer>
+      <developer>
+        <id>dilation</id>
+        <name>dilation</name>
+        <url>https://github.com/dilation</url>
+      </developer>
+    </developers>
+  }
+)
+
+lazy val noPublishSettings = Seq(
+  publish := (),
+  publishLocal := (),
+  publishArtifact := false
 )
 
 lazy val scalatest =

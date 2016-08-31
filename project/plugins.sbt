@@ -23,7 +23,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 updateOptions := updateOptions.value.withCachedResolution(true)
 
 addSbtPlugin(
@@ -43,3 +43,7 @@ addSbtPlugin("com.trueaccord.scalapb" % "sbt-scalapb" % "0.4.15")
 addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "4.0.0")
 
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "1.5.1")
+
+addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "1.1")
+
+addSbtPlugin("com.jsuereth" % "sbt-pgp" % "1.0.0")
