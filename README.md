@@ -1,5 +1,7 @@
 # Scala API for Mesos
 
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.nokia/mesos-scala-api_2.11/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.nokia/mesos-scala-api_2.11)
+
 This library provides a [Scala](http://www.scala-lang.org) API for [Mesos](https://mesos.apache.org).
 
 ## Getting Started
